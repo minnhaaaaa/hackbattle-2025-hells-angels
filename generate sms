@@ -1,0 +1,30 @@
+from faker import Faker
+import pandas as pd
+import random
+from faker.providers.file import Provider as FileProvider
+# Initialize Faker with a locale (e.g., 'en_US' for US English)
+fake = Faker('en_GB')
+
+def create_mock_data(num_records):
+    data = []
+    for _ in range(num_records):
+        company=fake.company()
+        transaction_date= fake.date_time_between(start_date='-1y', end_date='now')
+        amount=fake.finance.amount()
+        balance=faker.finance.amount()
+        data.append({
+         'Company':company,
+         'transactionDate':transaction_date,
+         'amount':amount,
+         'balance':balance
+        })
+    return pd.DataFrame(data)
+
+# Create a dataset with 100 records
+mock_df = create_mock_data(100)
+
+# Display the first few rows of the generated DataFrame
+print(mock_df.head())
+
+# Optional: Save the mock data to a CSV file
+# mock_df.to_csv('mock_employee_data.csv', index=False)
