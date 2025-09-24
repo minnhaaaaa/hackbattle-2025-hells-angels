@@ -193,6 +193,75 @@ def get_forecast():
     forecast = forecast_by_category(transactions, days_ahead=7)
     return JSONResponse(content={"forecast": forecast})
 
+#Financial Tip Generator
+def financial_tips(df, income=50000, shopping_limit=10000):
+    tips = []
+    total_spent = df['Amount'].sum()
+    savings = income - total_spent
+    savings_rate = (savings / income) * 100
+
+    # ---- CATEGORY-WISE RULES ---- #
+    category_spend = df.groupby("Category")['Amount'].sum()
+
+    # Food spending rule
+    if "Food" in category_spend and (category_spend["Food"] / income) * 100 > 30:
+        tips.append("🍲 Your food spending is quite high. Try home cooking twice a week.")
+
+    # Entertainment upward trend (check last 2 months avg vs earlier)
+    if "Entertainment" in df['Category'].unique():
+        df['Month'] = pd.to_datetime(df['Date']).dt.to_period('M')
+        ent_monthly = df[df['Category'] == "Entertainment"].groupby('Month')['Amount'].sum()
+        if len(ent_monthly) >= 2 and ent_monthly.iloc[-1] > ent_monthly.iloc[-2]:
+            tips.append("🎬 Entertainment spending is increasing. Set a monthly cap for subscriptions.")
+
+    # Utilities spike (compare last month to avg of earlier months)
+    if "Utilities" in df['Category'].unique():
+        util_monthly = df[df['Category'] == "Utilities"].groupby('Month')['Amount'].sum()
+        if len(util_monthly) >= 2 and util_monthly.iloc[-1] > util_monthly.iloc[:-1].mean() * 1.3:
+            tips.append("💡 Utility bills spiked. Consider energy-saving habits.")
+
+    # Shopping threshold
+    if "Shopping" in category_spend and category_spend["Shopping"] > shopping_limit:
+        tips.append("🛍️ You’re spending a lot on shopping. Do you really need all those impulse buys?")
+
+    # Savings rate rule
+    if savings_rate < 20:
+        tips.append("💰 Try saving at least 20% of income for future security.")
+
+    return tips
+
+tips = {
+    "Food": [
+        {"rule": lambda spend: spend > 0.3, "msg": "🍲 Your food spending is quite high. Try home cooking twice a week."}
+    ],
+    "Entertainment": [
+        {"rule": lambda trend: trend == "up", "msg": "🎬 Entertainment spending is increasing. Set a monthly cap for subscriptions."}
+    ],
+    "Utilities": [
+        {"rule": lambda spike: spike, "msg": "💡 Utility bills spiked. Consider energy-saving habits."}
+    ],
+    "Shopping": [
+        {"rule": lambda spend: spend > 10000, "msg": "🛍️ You’re spending a lot on shopping. Do you really need all those impulse buys?"}
+    ],
+    "Savings": [
+        {"rule": lambda rate: rate < 0.2, "msg": "💰 Try saving at least 20% of income for future security."}
+    ]
+}
+
+@app.get("/tips/{category}")
+def get_tip(category: str, spend: float = 0, trend: str = "flat", spike: bool = False, savings_rate: float = 0.3):
+    category = category.capitalize()
+    if category not in tips:
+        return {"category": category, "tip": "No tips available for this category."}
+    
+    for rule in tips[category]:
+        # apply the rule using relevant metric
+        metric = spend if category in ["Food", "Shopping"] else (trend if category=="Entertainment" else (spike if category=="Utilities" else savings_rate))
+        if rule["rule"](metric):
+            return {"category": category, "tip": rule["msg"]}
+    
+    return {"category": category, "tip": "You're on track. Keep it up!"}
+
 #Health Check
 @app.get("/")
 def read_root():
