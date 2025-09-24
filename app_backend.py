@@ -115,9 +115,52 @@ def get_detect_fraud(transactions):
     for txn in transactions:
         txn["category"] = categorize_transaction(txn["merchant"], txn["type"])
     frauds = detect_fraud(transactions)
-    return {"fraud_alerts": frauds}
+    return JSONResponse(content = {"fraud_alerts": frauds})
 
+def generate_identity_fingerprint(transactions):
+    fingerprint = {}
 
+    # Spending distribution
+    category_totals = defaultdict(int)
+    total_debit = 0
+    for txn in transactions:
+        if txn["type"].lower() == "debit":
+            category_totals[txn["category"]] += txn["amount"]
+            total_debit += txn["amount"]
+    
+    fingerprint["spending_distribution"] = {cat: round(amount/total_debit*100, 1)
+                                            for cat, amount in category_totals.items()}
+
+    # Average transaction size
+    debit_txns = [txn["amount"] for txn in transactions if txn["type"].lower() == "debit"]
+    fingerprint["average_transaction"] = round(sum(debit_txns)/len(debit_txns), 2) if debit_txns else 0
+
+    # Frequency per category
+    freq_counter = defaultdict(int)
+    for txn in transactions:
+        freq_counter[txn["category"]] += 1
+    fingerprint["frequency_per_category"] = dict(freq_counter)
+
+    # Savings rate
+    total_credit = sum(txn["amount"] for txn in transactions if txn["type"].lower() == "credit")
+    fingerprint["savings_rate"] = round(((total_credit - total_debit)/total_credit)*100, 1) if total_credit > 0 else 0
+
+    # Behavior trajectory
+    behavior = defaultdict(list)
+    for txn in transactions:
+        if txn["type"].lower() == "debit":
+            behavior[txn["category"]].append({"date": txn["date"], "amount": txn["amount"]})
+    fingerprint["behavior_trajectory"] = dict(behavior)
+
+    return fingerprint
+
+@app.get("/identity-fingerprint")
+def get_identity_fingerprint(transactions):
+    transactions = generate_sms_data(50)
+    for txn in transactions:
+        txn["category"] = categorize_transaction(txn["merchant"], txn["type"])
+    fingerprint = generate_identity_fingerprint(transactions)
+    return JSONResponse(content = {"identity_fingerprint": fingerprint})
 
 #Health Check
 @app.get("/")
